@@ -1,0 +1,162 @@
+library(rstan)
+library(ggplot2)
+library(bayesplot)
+library(data.table)
+library(dplyr)
+library(xtable)
+
+
+if (!grepl("tweet_woc", getwd())) {setwd("./tweet_woc/")}
+
+
+rm(list = ls(all.names = TRUE)) #will clear all objects includes hidden objects.
+gc() #free up memrory and report the memory usage.
+
+input_list = readRDS("./step1_stanlist.rds")
+model_name = 'logit_ordered_polinteraction_CTXT_tree10_8feb'
+step1 = readRDS(paste0("./stan trained models step1/",model_name,".rds"))
+con_names =  gsub("context_","",colnames(input_list$x_ctxt))
+df = as.data.table(readRDS("./step1_preprocessed.rds"))
+
+df$state_short
+
+# latex model -------------------------------------------------------------
+
+a = summary(step1, probs=c(.1,.5,.9), pars = c('theta','alpha',"party","sigma_party","sex",'sigma_sex',"state","sigma_state","age", "sigma_age","lp__"))
+rownames(a$summary) = c("Theta[1]","Theta[2]","Theta[3]","Intercept",
+                        "Party: Democrat", "Party: Neutral", "Party: Republican", "sigma Party",
+                        "Sex:Female", "Sex:Male", "sigma Sex",
+                        paste0( rep("State:", 51), levels(df$state_short))  ,"sigma State",
+                        "Age:-18", "Age:19-29" ,"Age:30-39" , "Age:40+", "sigma Age",
+                        "lp__"
+)
+View(a)
+
+latex_code <- xtable(a$summary, caption = paste0("Step1"), label = paste0("tab:model_summary"))
+latex_code
+
+# posterior distribution plotting ----------------------------------------
+
+
+ctxt = mcmc_intervals(as.data.frame(
+  rstan::extract(step1, pars= c('ctxt'))), prob = 0.5, prob_outer = 0.9) +
+  theme_minimal() + geom_vline(xintercept = 0) + 
+  scale_y_discrete(labels = con_names) 
+ctxt
+ggsave(
+  filename = "./step1_ctxt.pdf",
+  plot = ctxt,
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 6,
+  height = 8,
+  units = c("in"))
+
+ctxt_int = mcmc_intervals(as.data.frame(
+  rstan::extract(step1, pars= c('lambda_CTXTparty')))[,c(1:30,61:90)], prob = 0.5, prob_outer = 0.9) +
+  theme_minimal() + geom_vline(xintercept = 0) +
+  scale_y_discrete(labels = paste(c(rep("Democrat:",30,),(rep("Republican:",30))),rep(con_names,2))) 
+ggsave(
+  filename = "./step1_ctxtint.pdf",
+  plot = ctxt_int,
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 6,
+  height = 8,
+  units = c("in"))
+
+party = mcmc_intervals(as.data.frame(
+  rstan::extract(step1, pars= c('party'))), prob = 0.5, prob_outer = 0.9) +
+  theme_minimal() + geom_vline(xintercept = 0) +
+  scale_y_discrete(labels = paste(c("Dem","Neutral","Rep")))
+ggsave(
+  filename = "./step1_party.pdf",
+  plot = party,
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 6,
+  height = 8,
+  units = c("in"))
+
+
+
+alpha = mcmc_intervals(as.data.frame(
+  rstan::extract(step1, pars= c('alpha'))), prob = 0.5, prob_outer = 0.9) +
+  theme_minimal() + geom_vline(xintercept = 0) +
+  scale_y_discrete(labels = paste(c("Intercept")))
+ggsave(
+  filename = "./step1_intercept.pdf",
+  plot = alpha,
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 6,
+  height = 8,
+  units = c("in"))
+
+age = mcmc_intervals(as.data.frame(
+  rstan::extract(step1, pars= c('age'))), prob = 0.5, prob_outer = 0.9) +
+  theme_minimal() + geom_vline(xintercept = 0) +
+  scale_y_discrete(labels = paste(c("-18","18-29",'30-39','40+')))
+
+ggsave(
+  filename = "./step1_age.pdf",
+  plot = age,
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 6,
+  height = 8,
+  units = c("in"))
+
+gen = mcmc_intervals(as.data.frame(
+  rstan::extract(step1, pars= c('sex'))), prob = 0.5, prob_outer = 0.9) +
+  theme_minimal() + geom_vline(xintercept = 0) +
+  scale_y_discrete(labels = paste(c("Female","Male")))
+
+ggsave(
+  filename = "./step1_gen.pdf",
+  plot = gen,
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 6,
+  height = 8,
+  units = c("in"))
+
+
+
+# id params review --------------------------------------------------------
+
+
+ids = as.data.frame(rstan::extract(step1, pars= c('id')))
+hist(colMeans(ids))
+
+
+
+# Dem & rep Difference ----------------------------------------------------
+
+dems = as.data.frame(rstan::extract(step1, pars= c('lambda_CTXTparty')))[,c(1:30)]
+dem_main = as.data.frame(rstan::extract(step1, pars= c('party')))[,c(1)]
+
+reps = as.data.frame(rstan::extract(step1, pars= c('lambda_CTXTparty')))[,c(61:90)]
+rep_main = as.data.frame(rstan::extract(step1, pars= c('party')))[,c(3)]
+
+ctxt_main = as.data.frame(rstan::extract(step1, pars= c('ctxt')))
+diff= (dems+dem_main + ctxt_main ) - (reps+ rep_main + ctxt_main) 
+
+order_diff = order(colMeans(diff))
+
+diff = diff %>% select(order_diff)
+
+
+
+mcmc_intervals(diff, prob = 0.5, prob_outer = 0.9) +
+  theme_minimal() + geom_vline(xintercept = 0) +   scale_y_discrete(labels = con_names[order_diff]) #+
+  #ggtitle("Dem - Rep context interactions")
+
+
+
