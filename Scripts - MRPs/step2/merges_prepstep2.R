@@ -272,19 +272,6 @@ df_tweets$party = factor(ifelse(is.na(df_tweets$party), "Neutral" ,df_tweets$par
 
 
 
-# merging topics ----------------------------------------------------------
-
-
-topics = read.csv("./Scripts - get merge external/external_data/GPT_topics.csv", numerals = c("no.loss"))
-topics = topics[,-2]
-
-
-names(topics) = c("topic","id_str")
-df_tweets = merge(df_tweets, topics,
-           by = "id_str")
-
-nrow(df_tweets)
-
 # merging context ---------------------------------------------------------
 
 context = readRDS("./Scripts - get merge external/external_data/context_topics.rds")
