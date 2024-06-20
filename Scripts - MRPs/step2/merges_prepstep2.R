@@ -14,6 +14,7 @@ library(jsonlite)
 library(stringi)
 library(survey)
 library(cdlTools)
+library(lme4)
 library(ggplot2)
 library(caret) 
 library(mltools)
@@ -154,6 +155,9 @@ for (i in seq_along(imports)) {
   
 }
 
+nrow(df_tweets)
+
+df_tweets$count
 
 # merging botometer -------------------------------------------------------
 
@@ -178,6 +182,9 @@ print(paste(nrow(df_tweets), "after botometer merge"))
 
 geo = fromJSON("./Scripts - get merge external/external_data/geo_results.json", 
                 flatten = T)[,1:8]
+#geo$state = sub(".*, ", "", geo$full_name)# Extract characters after pattern
+#geo$state = substr(geo$full_name, nchar(geo$full_name)-1, nchar(geo$full_name))
+
 
 geo = geo %>% dplyr::rename(geo.place_id = id) %>% 
   distinct(geo.place_id, .keep_all = T)
